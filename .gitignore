@@ -1,0 +1,14 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Generated data and outputs (reproducible)
+data/*.csv
+exports/
+run_report.bat
+
+# Editor / OS
+.vscode/
+.DS_Store
+Thumbs.db

@@ -1,0 +1,168 @@
+// =====================================================================
+// dax_measures.txt  -  every DAX item for the Power BI model
+// Create each one with: Modeling tab > New table / New measure
+// Table names assumed (after renaming in Power Query):
+//   dim_client, dim_advisor, dim_product, dim_asset_class, dim_date,
+//   fact_transactions, fact_monthly_aum, _Measures
+// =====================================================================
+
+// ---------- CALCULATED TABLE 1: date table (Modeling > New table) ----------
+dim_date =
+ADDCOLUMNS (
+    CALENDAR ( DATE ( 2023, 12, 1 ), DATE ( 2025, 12, 31 ) ),
+    "Year", YEAR ( [Date] ),
+    "Quarter", "Q" & QUARTER ( [Date] ),
+    "Year Quarter", YEAR ( [Date] ) & "-Q" & QUARTER ( [Date] ),
+    "Month Number", MONTH ( [Date] ),
+    "Month", FORMAT ( [Date], "MMM" ),
+    "Month Year", FORMAT ( [Date], "MMM YYYY" ),
+    "Year Month", YEAR ( [Date] ) * 100 + MONTH ( [Date] ),
+    "In Reporting Window", [Date] >= DATE ( 2024, 1, 1 )
+)
+
+// ---------- CALCULATED TABLE 2: items for the AUM waterfall ----------
+Bridge =
+DATATABLE (
+    "Item", STRING,
+    "Order", INTEGER,
+    {
+        { "Opening AUM", 1 },
+        { "Net New Assets", 2 },
+        { "Market Movement", 3 }
+    }
+)
+
+// ---------- AUM (a "snapshot" number: use the LAST month-end inside the period) ----------
+Closing AUM =
+VAR LastSnapshot = MAX ( fact_monthly_aum[snapshot_date] )
+RETURN
+    CALCULATE (
+        SUM ( fact_monthly_aum[aum_value] ),
+        fact_monthly_aum[snapshot_date] = LastSnapshot
+    )
+
+// Opening AUM = the month-end BEFORE the first day of the period
+Opening AUM =
+VAR PriorMonthEnd = EOMONTH ( MIN ( dim_date[Date] ), -1 )
+RETURN
+    CALCULATE (
+        SUM ( fact_monthly_aum[aum_value] ),
+        REMOVEFILTERS ( dim_date ),
+        fact_monthly_aum[snapshot_date] = PriorMonthEnd
+    )
+
+// ---------- Cash flows ----------
+Net New Assets =
+SUM ( fact_transactions[signed_amount] )
+
+Gross Inflows =
+CALCULATE (
+    SUM ( fact_transactions[amount] ),
+    fact_transactions[txn_type] IN { "SIP", "Lumpsum" }
+)
+
+Gross Outflows =
+CALCULATE (
+    SUM ( fact_transactions[amount] ),
+    fact_transactions[txn_type] = "Redemption"
+)
+
+Market Movement =
+[Closing AUM] - [Opening AUM] - [Net New Assets]
+
+AUM Growth % =
+DIVIDE ( [Closing AUM] - [Opening AUM], [Opening AUM] )
+
+// ---------- Display versions in Rs crore (format string:  "Rs "#,##0.0" Cr") ----------
+Closing AUM (Cr)      = DIVIDE ( [Closing AUM], 10000000 )
+Opening AUM (Cr)      = DIVIDE ( [Opening AUM], 10000000 )
+Net New Assets (Cr)   = DIVIDE ( [Net New Assets], 10000000 )
+Market Movement (Cr)  = DIVIDE ( [Market Movement], 10000000 )
+Gross Inflows (Cr)    = DIVIDE ( [Gross Inflows], 10000000 )
+Gross Outflows (Cr)   = DIVIDE ( [Gross Outflows], 10000000 )
+
+// ---------- Waterfall helper (use Bridge[Item] as the category) ----------
+Bridge Value (Cr) =
+SWITCH (
+    SELECTEDVALUE ( Bridge[Item] ),
+    "Opening AUM",     [Opening AUM (Cr)],
+    "Net New Assets",  [Net New Assets (Cr)],
+    "Market Movement", [Market Movement (Cr)]
+)
+
+// ---------- Clients ----------
+Active Clients =
+VAR LastSnapshot = MAX ( fact_monthly_aum[snapshot_date] )
+RETURN
+    CALCULATE (
+        DISTINCTCOUNT ( fact_monthly_aum[client_id] ),
+        fact_monthly_aum[snapshot_date] = LastSnapshot,
+        fact_monthly_aum[aum_value] > 0
+    )
+
+Opening Active Clients =
+VAR PriorMonthEnd = EOMONTH ( MIN ( dim_date[Date] ), -1 )
+RETURN
+    CALCULATE (
+        DISTINCTCOUNT ( fact_monthly_aum[client_id] ),
+        REMOVEFILTERS ( dim_date ),
+        fact_monthly_aum[snapshot_date] = PriorMonthEnd,
+        fact_monthly_aum[aum_value] > 0
+    )
+
+New Clients =
+CALCULATE (
+    COUNTROWS ( dim_client ),
+    USERELATIONSHIP ( dim_date[Date], dim_client[onboarding_date] )
+)
+
+Churned Clients =
+CALCULATE (
+    COUNTROWS ( dim_client ),
+    USERELATIONSHIP ( dim_date[Date], dim_client[churn_date] ),
+    dim_client[status] = "Churned"
+)
+
+Churn Rate % =
+DIVIDE ( [Churned Clients], [Opening Active Clients] + [New Clients] )
+
+Churned AUM (Cr) =
+DIVIDE (
+    CALCULATE (
+        SUM ( dim_client[aum_lost] ),
+        USERELATIONSHIP ( dim_date[Date], dim_client[churn_date] )
+    ),
+    10000000
+)
+
+Avg AUM per Client (Lakh) =
+DIVIDE ( [Closing AUM], [Active Clients] ) / 100000
+
+Client AUM (Lakh) =
+DIVIDE ( SUM ( dim_client[aum_latest] ), 100000 )
+
+// ---------- Dormant clients (as at the last snapshot date) ----------
+Dormant Clients =
+CALCULATE ( COUNTROWS ( dim_client ), dim_client[is_dormant] = TRUE () )
+
+Dormant AUM (Cr) =
+DIVIDE (
+    CALCULATE ( SUM ( dim_client[aum_latest] ), dim_client[is_dormant] = TRUE () ),
+    10000000
+)
+
+// ---------- Mix and benchmarks ----------
+Equity Share % =
+DIVIDE (
+    CALCULATE ( [Closing AUM], dim_asset_class[asset_class] = "Equity" ),
+    [Closing AUM]
+)
+
+Firm Churn Rate % =
+CALCULATE ( [Churn Rate %], REMOVEFILTERS ( dim_advisor ) )
+
+Churn vs Firm (pts) =
+( [Churn Rate %] - [Firm Churn Rate %] ) * 100
+
+AUM Rank =
+RANKX ( ALLSELECTED ( dim_advisor[advisor_name] ), [Closing AUM] )
