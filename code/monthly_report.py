@@ -20,7 +20,7 @@ import sys
 from datetime import date
 
 import pandas as pd
-from openpyxl.styles import Alignment, Font, PatternFill
+from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import URL
@@ -117,6 +117,115 @@ def style_sheet(ws, df):
     ws.auto_filter.ref = ws.dimensions
 
 
+def add_tie_out_block(ws):
+    """Add tie-out block in rows 10-21 of the Summary sheet using openpyxl formulas."""
+    header_fill = PatternFill("solid", fgColor="0B2545")
+    header_font = Font(bold=True, color="FFFFFF")
+    bold_font = Font(bold=True)
+    center_align = Alignment(horizontal="center", vertical="center")
+    right_align = Alignment(horizontal="right", vertical="center")
+    left_align = Alignment(horizontal="left", vertical="center")
+
+    thin_border = Side(style="thin", color="000000")
+    double_border = Side(style="double", color="000000")
+    total_border = Border(top=thin_border, bottom=double_border)
+
+    # Headers in row 10
+    headers = [
+        ("A10", "City / Branch"),
+        ("B10", "AUM (Rs Cr)"),
+        ("C10", "Dormant Clients"),
+        ("D10", "Dormant AUM (Rs Cr)"),
+    ]
+    for cell_ref, text_val in headers:
+        cell = ws[cell_ref]
+        cell.value = text_val
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = center_align
+
+    # Nine cities A11:A19 incl. Unknown
+    cities = [
+        "Ahmedabad",
+        "Bengaluru",
+        "Chennai",
+        "Delhi NCR",
+        "Hyderabad",
+        "Kolkata",
+        "Mumbai",
+        "Pune",
+        "Unknown",
+    ]
+
+    for idx, city in enumerate(cities, start=11):
+        cell_a = ws[f"A{idx}"]
+        cell_a.value = city
+        cell_a.alignment = left_align
+
+        cell_b = ws[f"B{idx}"]
+        cell_b.value = f"=SUMIFS(Advisor_Scorecard!D:D, Advisor_Scorecard!B:B, A{idx})"
+        cell_b.number_format = "#,##0.0"
+        cell_b.alignment = right_align
+
+        cell_c = ws[f"C{idx}"]
+        cell_c.value = f"=COUNTIFS(Dormant_Clients!D:D, A{idx})"
+        cell_c.number_format = "#,##0"
+        cell_c.alignment = right_align
+
+        cell_d = ws[f"D{idx}"]
+        cell_d.value = f"=SUMIFS(Dormant_Clients!G:G, Dormant_Clients!D:D, A{idx})/100"
+        cell_d.number_format = "#,##0.0"
+        cell_d.alignment = right_align
+
+    # Row 20: Totals
+    ws["A20"].value = "Total"
+    ws["A20"].font = bold_font
+    ws["A20"].alignment = left_align
+    ws["A20"].border = total_border
+
+    ws["B20"].value = "=SUM(B11:B19)"
+    ws["B20"].font = bold_font
+    ws["B20"].number_format = "#,##0.0"
+    ws["B20"].alignment = right_align
+    ws["B20"].border = total_border
+
+    ws["C20"].value = "=SUM(C11:C19)"
+    ws["C20"].font = bold_font
+    ws["C20"].number_format = "#,##0"
+    ws["C20"].alignment = right_align
+    ws["C20"].border = total_border
+
+    ws["D20"].value = "=SUM(D11:D19)"
+    ws["D20"].font = bold_font
+    ws["D20"].number_format = "#,##0.0"
+    ws["D20"].alignment = right_align
+    ws["D20"].border = total_border
+
+    # Row 21: Check cells using 0.1% tolerance
+    ws["A21"].value = "Tie-out Check"
+    ws["A21"].font = bold_font
+    ws["A21"].alignment = left_align
+
+    ws["B21"].value = '=IF(ABS(B20-B3)/B3<=0.001, "OK", "DIFF")'
+    ws["B21"].font = bold_font
+    ws["B21"].alignment = center_align
+
+    ws["C21"].value = '=IF(ABS(C20-B7)/B7<=0.001, "OK", "DIFF")'
+    ws["C21"].font = bold_font
+    ws["C21"].alignment = center_align
+
+    ws["D21"].value = '=IF(ABS(D20-B8)/B8<=0.001, "OK", "DIFF")'
+    ws["D21"].font = bold_font
+    ws["D21"].alignment = center_align
+
+    # Remove auto-filter on Summary and adjust column widths
+    ws.auto_filter.ref = None
+    ws.column_dimensions["A"].width = 34
+    ws.column_dimensions["B"].width = 18
+    ws.column_dimensions["C"].width = 18
+    ws.column_dimensions["D"].width = 24
+
+
 def main():
     log.info("Connecting to %s@%s/%s", url.username, url.host, url.database)
     with engine.connect() as conn:
@@ -157,6 +266,7 @@ def main():
         style_sheet(writer.sheets["Summary"], summary)
         for name, df in tables.items():
             style_sheet(writer.sheets[name], df)
+        add_tie_out_block(writer.sheets["Summary"])
     log.info("Wrote %s  (%d sheets)", out, 1 + len(tables))
 
 
