@@ -32,19 +32,19 @@ This project delivers actionable visibility into firm-wide AUM roll-forwards, ad
 The Power BI reporting suite connects to PostgreSQL reporting views via a star-schema model, visualizing firm performance across four specialized reporting pages.
 
 * **Page 1: Executive Overview & AUM Bridge**  
-  *TODO: Add screenshot `docs/screenshots/page1.png`*  
+  ![Executive Summary](docs/screenshots/page1.png) 
   Tracks headline KPIs, AUM roll-forward waterfall (Opening → Net New Assets → Market Movement → Closing), asset class breakdown, and segment composition.
 
 * **Page 2: Advisor Performance & Scorecards**  
-  *TODO: Add screenshot `docs/screenshots/page2.png`*  
+  ![Clients and Segments](docs/screenshots/page2.png)  
   Evaluates 40 advisors across 8 branch locations on AUM managed, NNA generated (last 12 months), and client retention rankings.
 
 * **Page 3: Client Churn & Behavioral Analytics**  
-  *TODO: Add screenshot `docs/screenshots/page3.png`*  
+  ![Advisor Performance](docs/screenshots/page3.png)  
   Analyzes client attrition by channel, risk profile, and market timeline, tracking the impact of early 2025 equity market corrections on aggressive investors.
 
 * **Page 4: Client Health, Dormancy & Suitability Compliance**  
-  *TODO: Add screenshot `docs/screenshots/page4.png`*  
+  ![Churn and Retention](docs/screenshots/page4.png) 
   Surfaces actionable operational lists: dormant clients holding unmanaged capital and conservative portfolios with equity suitability drift.
 
 ---
@@ -179,3 +179,4 @@ See [docs/control_totals.md](docs/control_totals.md) for the complete audit tabl
 ## Author
 **Trisha Joy Alappat**  
 Wealth Management Analytics Portfolio Project
+
